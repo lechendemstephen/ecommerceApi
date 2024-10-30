@@ -12,10 +12,12 @@ router = APIRouter(
 
 
 @router.get('/product')
-async def get_users(): 
+async def get_users(db: Session = Depends(get_db), limit=10): 
+    all_products = db.query(Products).limit(limit).all()
+
 
     return {
-        "products": "show all product"
+        "products": all_products
     }
 
 # adding products to the database 
@@ -49,6 +51,46 @@ async def create_product(
 
     return new_product 
 
-    
+@router.delete('/id')
+async def delete_product(id: int , db: Session = Depends(get_db)): 
+    single_product = db.query(Products).filter(Products.id == id).first()
 
+    if single_product == None: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'no product found with id: {id}')
+    
+    db.delete(single_product)
+    db.commit()
+
+    return {
+        "message": f'product with id {id} successfully deleted'
+    }
+
+@router.put('/id')
+async def update_product(id:int,
+    update_product = schemas.ProductUpdate,          
+    image:  UploadFile = File(...), db: Session = Depends(get_db)): 
+
+    edit_product = db.query(Products).filter(Products.id ==id).first()
+
+    if edit_product == None: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'no product with id {id} found')
+    
+    for key, value in update_product.dict().items(): 
+        if value is not None: 
+            setattr(edit_product, key, value)
+
+    if image: 
+        # saving uploaded image 
+        image_fileaname = f'{uuid4()}.jpg'
+        image_path = os.path.join(schemas.PRODUCT_DIR, image_fileaname)
+    
+        with open(image_path, "wb") as buffer: 
+            buffer.write(await image.read())
+        
+        edit_product.img_path = image_path 
+    
+    db.commit()
+    db.refresh(edit_product)
+
+    return edit_product 
 
